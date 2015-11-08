@@ -334,6 +334,48 @@ module KVM
             protocol = ele.attributes['protocol'] rescue nil
             name = ele.attributes['name'] rescue nil
 
+            # get dev attribute (for block devices)
+            dev = ele.attributes['dev'] rescue nil
+
+            datastore_id = nil
+            if systemds
+                datastore_id = systemds.split("/")[-2].to_i
+            elsif dev
+                datastore_id = systemds.split("/")[-3].to_i
+            end
+
+            if datastore_id
+                poll_disk_info = "../../vmm/kvm/poll_disk_info.#{datastore_id}"
+                if File.executable?(poll_disk_info)
+                    poll_type = nil
+                    poll_target = nil
+                    if file
+                        poll_type = "file"
+                        poll_target = file
+                    elsif dev
+                        poll_type = "dev"
+                        poll_target = dev
+                    end
+                    if poll_target
+                        disk_id = poll_target.split(".")[-1].to_i
+                        dev_xml = `#{poll_disk_info} "#{poll_target}" #{poll_type}`
+                        next if !$? || !$?.success?
+
+                        dev_doc = REXML::Document.new( dev_xml )
+                        disk_size = dev_doc.elements["disk/size"].text.to_f/1024/1024
+
+                        data[:disk_size] << { :id => disk_id, :size => disk_size.round }
+
+                        dev_doc.elements.each("disk/snapshot") do |snap|
+                            snap_id = snap.elements["id"].text.to_i
+                            snapshot_size = snap.elements["size"].text.to_f/1024/1024
+                            data[:snapshot_size] << { :id => snap_id, :disk_id => disk_id, :size => snapshot_size.round }
+                        end
+                        next
+                    end
+                end
+            end
+
             if protocol == "rbd"
                 # Ceph
                 auth = ele.parent.elements["auth"].attributes["username"] rescue nil
