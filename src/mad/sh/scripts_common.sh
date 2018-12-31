@@ -462,10 +462,13 @@ function ssh_make_path
 set -e -o pipefail
 if [ ! -d $2 ]; then
    mkdir -p $2
-
-   if [ -n "$3" ]; then
-       echo "$3" > "\$(dirname $2)/.monitor"
+fi
+if [ -n "$3" ]; then
+   monitor_file="$(dirname $2)/.monitor"
+   if [ -f "\\$monitor_file" ]; then
+       monitor="\\$(<"\\$monitor_file" 2>/dev/null)"
    fi
+   [ "\\$monitor" = "$3" ] || echo "$3" > "\\$monitor_file" 2>&1
 fi
 EOF`
     SSH_EXEC_RC=$?
