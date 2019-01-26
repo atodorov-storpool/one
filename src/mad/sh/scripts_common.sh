@@ -466,7 +466,7 @@ fi
 if [ -n "$3" ]; then
    monitor_file="$(dirname $2)/.monitor"
    if [ -f "\\$monitor_file" ]; then
-       monitor="\\$(<"\\$monitor_file" 2>/dev/null)"
+       monitor="\\$(<"\\$monitor_file")"
    fi
    [ "\\$monitor" = "$3" ] || echo "$3" > "\\$monitor_file" 2>&1
 fi
