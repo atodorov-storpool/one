@@ -25,6 +25,56 @@
 #-------------------------------------------------------------------------------
 NODE_PATH = '/sys/bus/node/devices/'
 
+require 'yaml'
+begin
+    probes_path = File.dirname(File.realdirpath(__FILE__))
+    ETC_NAME = probes_path.split(File::SEPARATOR)[-1]
+
+    NAME = File.join(File.dirname(__FILE__),"../../etc/im/#{ETC_NAME}/numa.conf")
+    CONF = {
+        :machine_cgroup => '',
+        :cgroup_path => '/sys/fs/cgroup',
+    }.merge(YAML.load_file(NAME))
+rescue
+    STDERR.puts "Invalid configuration #{NAME}"
+    exit(-1)
+end
+
+def process_cgroup()
+    cg_name = CONF[:machine_cgroup]
+    cg = {
+        'cpuset' => {'cpus' => nil, 
+                     'mems' => nil
+                    },
+        'memory' => {'limit_in_bytes' => nil,
+                     'usage_in_bytes' => nil,
+                    },
+        }
+    if !cg_name.empty?
+        cg_path = CONF[:cgroup_path]
+        if !Dir.exist?(cg_path)
+            STDERR.puts "Path not found #{cg_path}"
+            exit(-1)
+        end
+        cg.each do |cgroup, list|
+            list.each do |entry, v|
+                begin
+                    path = "#{cg_path}/#{cgroup}/#{cg_name}/#{cgroup}.#{entry}"
+                    cg[cgroup][entry] = File.read(path).chomp
+                rescue
+                    STDERR.puts "Can't read #{path}"
+                    exit(-1)
+                end
+            end
+        end
+        cg['cpuset'][:cpus] = normalize_list(cg['cpuset']['cpus'])
+        cg['cpuset'][:mems] = normalize_list(cg['cpuset']['mems'])
+        cg['memory'][:limit] = cg['memory']['limit_in_bytes'].to_i / 1024
+        cg['memory'][:usage] = cg['memory']['usage_in_bytes'].to_i / 1024
+    end
+    cg
+end
+
 # Print node information in OpenNebula Template format. Example:
 #
 # HUGEPAGE = [NODE_ID = "0", SIZE = "1048576", PAGES = "0", FREE = "0"]
@@ -218,6 +268,9 @@ end
 # Get information for each NUMA node.
 # ------------------------------------------------------------------------------
 nodes = {}
+
+cgroup = process_cgroup()
+STDERR.puts "#{cgroup}"
 
 Dir.foreach(NODE_PATH) do |node|
     /node(?<node_id>\d+)/ =~ node
